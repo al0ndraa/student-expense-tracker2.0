@@ -18,49 +18,58 @@ export default function ExpenseScreen() {
   const [amount, setAmount] = useState('');
   const [category, setCategory] = useState('');
   const [note, setNote] = useState('');
+
+  const [total, setTotal] = useState(0);
+  const [categoryTotals, setCategoryTotals] = useState([]);
+
   const loadExpenses = async () => {
-    const rows = await db.getAllAsync(
-      'SELECT * FROM expenses ORDER BY id DESC;'
-    );
+    const rows = await db.getAllAsync('SELECT * FROM expenses ORDER BY id DESC;');
     setExpenses(rows);
+
+    const overall = await db.getAllAsync('SELECT SUM(amount) AS total FROM expenses;');
+    setTotal(overall[0]?.total ? overall[0].total : 0);
+
+    const cats = await db.getAllAsync('SELECT category, SUM(amount) AS total FROM expenses GROUP BY category;');
+    setCategoryTotals(cats);
   };
+
   const addExpense = async () => {
     const amountNumber = parseFloat(amount);
 
     if (isNaN(amountNumber) || amountNumber <= 0) {
-      // Basic validation: ignore invalid or non-positive amounts
       return;
     }
-
     const trimmedCategory = category.trim();
     const trimmedNote = note.trim();
 
     if (!trimmedCategory) {
-      // Category is required
       return;
     }
 
-    await db.runAsync(
-      'INSERT INTO expenses (amount, category, note) VALUES (?, ?, ?);',
-      [amountNumber, trimmedCategory, trimmedNote || null]
-    );
+    const dateValue = new Date().toISOString().split('T')[0];
 
+    await db.runAsync(
+      'INSERT INTO expenses (amount, category, note, date) VALUES (?, ?, ?, ?);',
+      [amountNumber, trimmedCategory, trimmedNote || null, dateValue]
+    );
     setAmount('');
     setCategory('');
     setNote('');
-
-    loadExpenses();
+    await loadExpenses();
   };
+
   const deleteExpense = async (id) => {
     await db.runAsync('DELETE FROM expenses WHERE id = ?;', [id]);
-    loadExpenses();
+    await loadExpenses();
   };
+
   const renderExpense = ({ item }) => (
     <View style={styles.expenseRow}>
       <View style={{ flex: 1 }}>
         <Text style={styles.expenseAmount}>${Number(item.amount).toFixed(2)}</Text>
         <Text style={styles.expenseCategory}>{item.category}</Text>
         {item.note ? <Text style={styles.expenseNote}>{item.note}</Text> : null}
+        {item.date ? <Text style={styles.expenseDate}>{item.date}</Text> : null}
       </View>
 
       <TouchableOpacity onPress={() => deleteExpense(item.id)}>
@@ -68,6 +77,7 @@ export default function ExpenseScreen() {
       </TouchableOpacity>
     </View>
   );
+
   useEffect(() => {
     async function setup() {
       await db.execAsync(`
@@ -75,7 +85,8 @@ export default function ExpenseScreen() {
           id INTEGER PRIMARY KEY AUTOINCREMENT,
           amount REAL NOT NULL,
           category TEXT NOT NULL,
-          note TEXT
+          note TEXT,
+          date TEXT NOT NULL
         );
       `);
 
@@ -84,9 +95,10 @@ export default function ExpenseScreen() {
 
     setup();
   }, []);
+
   return (
     <SafeAreaView style={styles.container}>
-      <Text style={styles.heading}>Student Expense Tracker</Text>
+      <Text style={styles.heading}>Student Expense Tracker 2.0</Text>
 
       <View style={styles.form}>
         <TextInput
@@ -114,13 +126,28 @@ export default function ExpenseScreen() {
         <Button title="Add Expense" onPress={addExpense} />
       </View>
 
+      {/* ---- Totals Section ---- */}
+      <View style={styles.totalsContainer}>
+        <Text style={styles.totalText}>
+          Total Spent: ${Number(total).toFixed(2)}
+        </Text>
+        {categoryTotals.length > 0 && (
+          <View style={{ marginTop: 8 }}>
+            <Text style={styles.categoryHeader}>By Category:</Text>
+            {categoryTotals.map((c) => (
+              <Text key={c.category} style={styles.categoryItem}>
+                {c.category}: ${Number(c.total).toFixed(2)}
+              </Text>
+            ))}
+          </View>
+        )}
+      </View>
+
       <FlatList
         data={expenses}
         keyExtractor={(item) => item.id.toString()}
         renderItem={renderExpense}
-        ListEmptyComponent={
-          <Text style={styles.empty}>No expenses yet.</Text>
-        }
+        ListEmptyComponent={<Text style={styles.empty}>No expenses yet.</Text>}
       />
 
       <Text style={styles.footer}>
@@ -129,12 +156,13 @@ export default function ExpenseScreen() {
     </SafeAreaView>
   );
 }
-  const styles = StyleSheet.create({
+
+const styles = StyleSheet.create({
   container: { flex: 1, padding: 16, backgroundColor: '#111827' },
   heading: {
     fontSize: 24,
     fontWeight: '700',
-    color: '#fff',
+    color: '#ff0088ff',
     marginBottom: 16,
   },
   form: {
@@ -149,6 +177,27 @@ export default function ExpenseScreen() {
     borderWidth: 1,
     borderColor: '#374151',
   },
+  totalsContainer: {
+    backgroundColor: '#1f2937',
+    padding: 12,
+    borderRadius: 8,
+    marginBottom: 16,
+  },
+  totalText: {
+    fontSize: 16,
+    color: '#fbbf24',
+    fontWeight: '700',
+  },
+  categoryHeader: {
+    color: '#9ca3af',
+    fontSize: 14,
+    fontWeight: '600',
+  },
+  categoryItem: {
+    color: '#93c5fd',
+    fontSize: 14,
+    marginLeft: 8,
+  },
   expenseRow: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -159,21 +208,25 @@ export default function ExpenseScreen() {
   },
   expenseAmount: {
     fontSize: 18,
-    fontWeight: '700',
-    color: '#fbbf24',
+    color: '#fff',
+    fontWeight: '600',
   },
   expenseCategory: {
+    color: '#93c5fd',
     fontSize: 14,
-    color: '#e5e7eb',
   },
   expenseNote: {
-    fontSize: 12,
+    color: '#d1d5db',
+    fontSize: 13,
+  },
+  expenseDate: {
     color: '#9ca3af',
+    fontSize: 12,
   },
   delete: {
-    color: '#f87171',
+    color: '#ff0000ff',
     fontSize: 20,
-    marginLeft: 12,
+    marginLeft: 10,
   },
   empty: {
     color: '#9ca3af',

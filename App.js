@@ -1,4 +1,3 @@
-//
 import { SQLiteProvider } from 'expo-sqlite';
 import ExpenseScreen from './ExpenseScreen';
 
